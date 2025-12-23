@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>双人对战数独</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app">
+        <!-- 房间选择界面 -->
+        <div id="lobby" class="screen active">
+            <h1>双人对战数独</h1>
+            <div class="lobby-content">
+                <div class="player-info">
+                    <label>你的名字：</label>
+                    <input type="text" id="playerName" placeholder="输入你的名字" maxlength="20">
+                </div>
+                <div class="room-actions">
+                    <div class="action-group">
+                        <input type="text" id="roomId" placeholder="房间号" maxlength="6">
+                        <button id="createRoom">创建房间</button>
+                        <button id="joinRoom">加入房间</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 等待界面 -->
+        <div id="waiting" class="screen">
+            <h1>等待对手</h1>
+            <div class="waiting-content">
+                <p>房间号: <span id="currentRoom"></span></p>
+                <p id="waitingMessage">等待另一位玩家加入...</p>
+                <div class="players-list">
+                    <div class="player-slot">
+                        <span id="player1Name">玩家1</span>
+                        <span class="status ready">✓</span>
+                    </div>
+                    <div class="player-slot">
+                        <span id="player2Name">等待中...</span>
+                        <span class="status waiting">?</span>
+                    </div>
+                </div>
+                <button id="leaveRoom">离开房间</button>
+            </div>
+        </div>
+
+        <!-- 游戏界面 -->
+        <div id="game" class="screen">
+            <div class="game-header">
+                <h2>双人对战数独</h2>
+                <div class="players-status">
+                    <div class="player-status">
+                        <span class="player-name" id="gamePlayer1Name">玩家1</span>
+                        <span class="player-progress" id="player1Progress">0/81</span>
+                        <span class="player-state" id="player1State">进行中</span>
+                    </div>
+                    <div class="vs">VS</div>
+                    <div class="player-status">
+                        <span class="player-name" id="gamePlayer2Name">玩家2</span>
+                        <span class="player-progress" id="player2Progress">0/81</span>
+                        <span class="player-state" id="player2State">进行中</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="game-content">
+                <div id="sudokuBoard"></div>
+                <div class="number-pad">
+                    <button class="num-btn" data-num="1">1</button>
+                    <button class="num-btn" data-num="2">2</button>
+                    <button class="num-btn" data-num="3">3</button>
+                    <button class="num-btn" data-num="4">4</button>
+                    <button class="num-btn" data-num="5">5</button>
+                    <button class="num-btn" data-num="6">6</button>
+                    <button class="num-btn" data-num="7">7</button>
+                    <button class="num-btn" data-num="8">8</button>
+                    <button class="num-btn" data-num="9">9</button>
+                    <button class="num-btn clear" data-num="0">清除</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 结果界面 -->
+        <div id="result" class="screen">
+            <h1 id="resultTitle">游戏结束</h1>
+            <div class="result-content">
+                <p id="resultMessage"></p>
+                <button id="backToLobby">返回大厅</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
+    <!-- 游戏脚本 -->
+    <script src="sudoku.js"></script>
+    <script src="firebase-config.js"></script>
+    <script src="game-firebase.js"></script>
+</body>
+</html>
