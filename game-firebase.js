@@ -10,9 +10,11 @@ class SudokuBattleFirebase {
         this.solution = null;
         this.validator = null;
         this.board = null;
+        this.marks = {}; // 标记数据: {row-col: Set([1,2,3...])}
         this.selectedCell = null;
         this.fixedCells = new Set();
         this.gameState = 'playing';
+        this.markMode = false; // 是否处于标记模式
         this.roomRef = null;
         this.myPlayerRef = null;
         this.listeners = [];
@@ -35,6 +37,10 @@ class SudokuBattleFirebase {
         document.getElementById('leaveRoom').addEventListener('click', () => this.leaveRoom());
         document.getElementById('backToLobby').addEventListener('click', () => this.backToLobby());
 
+        // 模式切换
+        document.getElementById('normalMode').addEventListener('click', () => this.setMode(false));
+        document.getElementById('markMode').addEventListener('click', () => this.setMode(true));
+
         document.querySelectorAll('.num-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const num = parseInt(e.target.dataset.num);
@@ -48,9 +54,18 @@ class SudokuBattleFirebase {
                     this.inputNumber(parseInt(e.key));
                 } else if (e.key === 'Backspace' || e.key === 'Delete' || e.key === '0') {
                     this.inputNumber(0);
+                } else if (e.key === 'm' || e.key === 'M') {
+                    // 按 M 键切换模式
+                    this.setMode(!this.markMode);
                 }
             }
         });
+    }
+
+    setMode(isMarkMode) {
+        this.markMode = isMarkMode;
+        document.getElementById('normalMode').classList.toggle('active', !isMarkMode);
+        document.getElementById('markMode').classList.toggle('active', isMarkMode);
     }
 
     showScreen(screenName) {
@@ -315,16 +330,38 @@ class SudokuBattleFirebase {
                 cell.dataset.row = row;
                 cell.dataset.col = col;
 
-                const value = this.board[row][col];
-                if (value !== 0) {
-                    cell.textContent = value;
-                }
-
                 if (this.fixedCells.has(`${row}-${col}`)) {
                     cell.classList.add('fixed');
+                    cell.textContent = this.board[row][col];
                 } else {
                     cell.classList.add('editable');
                     cell.addEventListener('click', () => this.selectCell(row, col));
+
+                    const value = this.board[row][col];
+                    const key = `${row}-${col}`;
+
+                    if (value !== 0) {
+                        // 显示填入的数字
+                        const valueSpan = document.createElement('span');
+                        valueSpan.className = 'cell-value';
+                        valueSpan.textContent = value;
+                        cell.appendChild(valueSpan);
+                    } else if (this.marks[key] && this.marks[key].size > 0) {
+                        // 显示标记
+                        const marksDiv = document.createElement('div');
+                        marksDiv.className = 'cell-marks';
+
+                        for (let i = 1; i <= 9; i++) {
+                            const markSpan = document.createElement('span');
+                            markSpan.className = 'cell-mark';
+                            if (this.marks[key].has(i)) {
+                                markSpan.textContent = i;
+                            }
+                            marksDiv.appendChild(markSpan);
+                        }
+
+                        cell.appendChild(marksDiv);
+                    }
                 }
 
                 boardElement.appendChild(cell);
@@ -352,41 +389,129 @@ class SudokuBattleFirebase {
         const { row, col } = this.selectedCell;
         if (this.fixedCells.has(`${row}-${col}`)) return;
 
-        this.board[row][col] = num;
+        const key = `${row}-${col}`;
 
-        const cellElement = document.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`);
-        cellElement.textContent = num === 0 ? '' : num;
-        cellElement.classList.remove('error');
+        if (this.markMode) {
+            // 标记模式
+            if (num === 0) {
+                // 清除所有标记
+                delete this.marks[key];
+            } else {
+                // 切换标记
+                if (!this.marks[key]) {
+                    this.marks[key] = new Set();
+                }
 
-        if (num !== 0) {
-            if (!this.validator.validateCell(row, col, num)) {
-                cellElement.classList.add('error');
-                this.gameState = 'failed';
+                if (this.marks[key].has(num)) {
+                    this.marks[key].delete(num);
+                } else {
+                    this.marks[key].add(num);
+                }
 
-                // 更新 Firebase
-                await this.updateMyState('failed');
-
-                setTimeout(() => {
-                    this.endGame(false);
-                }, 800);
-                return;
+                if (this.marks[key].size === 0) {
+                    delete this.marks[key];
+                }
             }
 
-            if (this.validator.isComplete(this.board)) {
-                this.gameState = 'won';
+            // 重新渲染棋盘
+            this.renderBoard();
 
-                // 更新 Firebase
-                await this.updateMyState('won');
+            // 重新选中当前格子
+            this.selectCell(row, col);
+        } else {
+            // 正常填数模式
+            this.board[row][col] = num;
 
-                setTimeout(() => {
-                    this.endGame(true);
-                }, 500);
-                return;
+            // 清除该格子的标记
+            delete this.marks[key];
+
+            if (num !== 0) {
+                // 自动消除相关格子的标记
+                this.autoEliminateMarks(row, col, num);
+
+                // 验证数字
+                if (!this.validator.validateCell(row, col, num)) {
+                    // 错误 - 先渲染再显示错误
+                    this.renderBoard();
+                    this.selectCell(row, col);
+
+                    const cellElement = document.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`);
+                    cellElement.classList.add('error');
+                    this.gameState = 'failed';
+
+                    // 更新 Firebase
+                    await this.updateMyState('failed');
+
+                    setTimeout(() => {
+                        this.endGame(false);
+                    }, 800);
+                    return;
+                }
+
+                // 检查是否完成
+                if (this.validator.isComplete(this.board)) {
+                    this.gameState = 'won';
+
+                    // 更新 Firebase
+                    await this.updateMyState('won');
+
+                    this.renderBoard();
+
+                    setTimeout(() => {
+                        this.endGame(true);
+                    }, 500);
+                    return;
+                }
+            }
+
+            // 重新渲染棋盘
+            this.renderBoard();
+
+            // 重新选中当前格子
+            this.selectCell(row, col);
+
+            // 更新进度
+            await this.updateMyProgress();
+        }
+    }
+
+    autoEliminateMarks(row, col, num) {
+        // 消除同一行的标记
+        for (let c = 0; c < 9; c++) {
+            const key = `${row}-${c}`;
+            if (this.marks[key]) {
+                this.marks[key].delete(num);
+                if (this.marks[key].size === 0) {
+                    delete this.marks[key];
+                }
             }
         }
 
-        // 更新进度
-        await this.updateMyProgress();
+        // 消除同一列的标记
+        for (let r = 0; r < 9; r++) {
+            const key = `${r}-${col}`;
+            if (this.marks[key]) {
+                this.marks[key].delete(num);
+                if (this.marks[key].size === 0) {
+                    delete this.marks[key];
+                }
+            }
+        }
+
+        // 消除同一宫格的标记
+        const startRow = Math.floor(row / 3) * 3;
+        const startCol = Math.floor(col / 3) * 3;
+        for (let r = startRow; r < startRow + 3; r++) {
+            for (let c = startCol; c < startCol + 3; c++) {
+                const key = `${r}-${c}`;
+                if (this.marks[key]) {
+                    this.marks[key].delete(num);
+                    if (this.marks[key].size === 0) {
+                        delete this.marks[key];
+                    }
+                }
+            }
+        }
     }
 
     async updateMyProgress() {
@@ -453,8 +578,10 @@ class SudokuBattleFirebase {
 
         this.selectedCell = null;
         this.board = null;
+        this.marks = {};
         this.fixedCells.clear();
         this.gameState = 'playing';
+        this.markMode = false;
         this.roomRef = null;
 
         this.showScreen('lobby');
