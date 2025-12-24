@@ -15,6 +15,7 @@ class SudokuBattleFirebase {
         this.fixedCells = new Set();
         this.gameState = 'playing';
         this.markMode = false; // 是否处于标记模式
+        this.highlightedNumber = null; // 当前高亮的数字
         this.roomRef = null;
         this.myPlayerRef = null;
         this.listeners = [];
@@ -91,7 +92,7 @@ class SudokuBattleFirebase {
 
         // 生成数独谜题
         const generator = new SudokuGenerator();
-        const { puzzle, solution } = generator.generatePuzzle('medium');
+        const { puzzle, solution } = generator.generatePuzzle('easy');
         this.puzzle = puzzle;
         this.solution = solution;
         this.board = this.copyBoard(puzzle);
@@ -307,12 +308,10 @@ class SudokuBattleFirebase {
                 `player-state ${opponent.state === 'playing' ? 'playing' :
                 opponent.state === 'failed' ? 'failed' : 'won'}`;
 
-            // 检查游戏结束条件
+            // 检查游戏结束条件 - 只有自己也完成或失败时才结束
             if (this.gameState === 'playing' && opponent.state === 'won') {
-                this.gameState = 'lost';
-                setTimeout(() => {
-                    this.endGame(false);
-                }, 500);
+                // 对手获胜，但自己可以继续玩
+                // 不立即结束游戏
             }
         });
 
@@ -330,14 +329,18 @@ class SudokuBattleFirebase {
                 cell.dataset.row = row;
                 cell.dataset.col = col;
 
+                const value = this.board[row][col];
+
                 if (this.fixedCells.has(`${row}-${col}`)) {
                     cell.classList.add('fixed');
-                    cell.textContent = this.board[row][col];
+                    cell.textContent = value;
+                    // 固定格子也可以点击以高亮相同数字
+                    if (value !== 0) {
+                        cell.addEventListener('click', () => this.highlightNumber(value));
+                    }
                 } else {
                     cell.classList.add('editable');
-                    cell.addEventListener('click', () => this.selectCell(row, col));
 
-                    const value = this.board[row][col];
                     const key = `${row}-${col}`;
 
                     if (value !== 0) {
@@ -346,7 +349,14 @@ class SudokuBattleFirebase {
                         valueSpan.className = 'cell-value';
                         valueSpan.textContent = value;
                         cell.appendChild(valueSpan);
-                    } else if (this.marks[key] && this.marks[key].size > 0) {
+                        // 可编辑的已填数字也可以点击高亮
+                        cell.addEventListener('click', () => this.highlightNumber(value));
+                    } else {
+                        // 空格子点击选中
+                        cell.addEventListener('click', () => this.selectCell(row, col));
+                    }
+
+                    if (value === 0 && this.marks[key] && this.marks[key].size > 0) {
                         // 显示标记
                         const marksDiv = document.createElement('div');
                         marksDiv.className = 'cell-marks';
@@ -364,9 +374,63 @@ class SudokuBattleFirebase {
                     }
                 }
 
+                // 应用高亮
+                if (this.highlightedNumber !== null) {
+                    if (value === this.highlightedNumber) {
+                        // 相同数字高亮
+                        cell.classList.add('highlight-same');
+                    } else if (value !== 0 || this.marks[`${row}-${col}`]) {
+                        // 检查是否在相同行、列或宫格
+                        const cells = this.getCellsWithNumber(this.highlightedNumber);
+                        for (const { r, c } of cells) {
+                            if (r === row || c === col || this.sameBox(r, c, row, col)) {
+                                cell.classList.add('highlight-related');
+                                break;
+                            }
+                        }
+                    }
+
+                    // 高亮标记中的数字
+                    const key = `${row}-${col}`;
+                    if (this.marks[key] && this.marks[key].has(this.highlightedNumber)) {
+                        const markSpans = cell.querySelectorAll('.cell-mark');
+                        markSpans[this.highlightedNumber - 1]?.classList.add('highlight-mark');
+                    }
+                }
+
                 boardElement.appendChild(cell);
             }
         }
+    }
+
+    highlightNumber(num) {
+        if (this.highlightedNumber === num) {
+            // 再次点击相同数字，取消高亮
+            this.highlightedNumber = null;
+        } else {
+            this.highlightedNumber = num;
+        }
+        this.renderBoard();
+    }
+
+    getCellsWithNumber(num) {
+        const cells = [];
+        for (let r = 0; r < 9; r++) {
+            for (let c = 0; c < 9; c++) {
+                if (this.board[r][c] === num) {
+                    cells.push({ r, c });
+                }
+            }
+        }
+        return cells;
+    }
+
+    sameBox(r1, c1, r2, c2) {
+        const box1Row = Math.floor(r1 / 3);
+        const box1Col = Math.floor(c1 / 3);
+        const box2Row = Math.floor(r2 / 3);
+        const box2Col = Math.floor(c2 / 3);
+        return box1Row === box2Row && box1Col === box2Col;
     }
 
     selectCell(row, col) {
@@ -374,6 +438,8 @@ class SudokuBattleFirebase {
         if (this.fixedCells.has(`${row}-${col}`)) return;
 
         this.selectedCell = { row, col };
+        // 清除高亮
+        this.highlightedNumber = null;
 
         document.querySelectorAll('.cell').forEach(cell => {
             cell.classList.remove('selected');
@@ -457,8 +523,18 @@ class SudokuBattleFirebase {
 
                     this.renderBoard();
 
+                    // 检查对手状态来决定结果
+                    const snapshot = await this.roomRef.once('value');
+                    const room = snapshot.val();
+                    const opponent = this.isHost ? room.guest : room.host;
+
                     setTimeout(() => {
-                        this.endGame(true);
+                        // 如果对手已经完成，说明自己是后完成的
+                        if (opponent.state === 'won') {
+                            this.endGame(false); // 对手先完成，自己输了
+                        } else {
+                            this.endGame(true); // 自己先完成，赢了
+                        }
                     }, 500);
                     return;
                 }
