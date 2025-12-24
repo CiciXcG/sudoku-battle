@@ -377,10 +377,10 @@ class SudokuBattleFirebase {
                 // 应用高亮
                 if (this.highlightedNumber !== null) {
                     if (value === this.highlightedNumber) {
-                        // 相同数字高亮
+                        // 相同数字高亮（黄色）
                         cell.classList.add('highlight-same');
-                    } else if (value !== 0 || this.marks[`${row}-${col}`]) {
-                        // 检查是否在相同行、列或宫格
+                    } else {
+                        // 检查是否在相同行、列或宫格（绿色）
                         const cells = this.getCellsWithNumber(this.highlightedNumber);
                         for (const { r, c } of cells) {
                             if (r === row || c === col || this.sameBox(r, c, row, col)) {
