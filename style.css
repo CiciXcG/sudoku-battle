@@ -323,11 +323,25 @@ button:active {
     animation: shake 0.3s;
 }
 
+.cell.highlight-same {
+    background: #fff9c4 !important;
+}
+
+.cell.highlight-related {
+    background: #e8f5e9 !important;
+}
+
+.cell-mark.highlight-mark {
+    background: #fff9c4;
+    border-radius: 2px;
+}
+
 @keyframes shake {
     0%, 100% { transform: translateX(0); }
     25% { transform: translateX(-5px); }
     75% { transform: translateX(5px); }
 }
+
 /* 控制面板 */
 .controls {
     display: flex;
@@ -365,6 +379,7 @@ button:active {
 .mode-btn:hover:not(.active) {
     background: #e0e0e0;
 }
+
 /* 数字键盘 */
 .number-pad {
     display: grid;
